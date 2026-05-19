@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mermaid Studio</title>
+
+<!-- Inline SVG favicon: two cyan nodes joined by an L-connector on the
+     dark IDE background. Kept as a data URI so the file remains a
+     single-file deliverable that runs from file:// with no external
+     asset. The # characters in hex colours are URL-encoded (%23). -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0e14'/><rect x='3' y='4' width='10' height='6' fill='%2300D4FF'/><rect x='19' y='22' width='10' height='6' fill='%2300D4FF'/><path d='M8 10 L8 18 L24 18 L24 22' stroke='%2300D4FF' stroke-width='2' fill='none'/></svg>">
+
+<!-- JetBrains Mono — geek-grade monospace with programming ligatures.
+     Preconnect handles DNS+TLS before the stylesheet request; display=swap
+     lets the fallback system mono render immediately and swap once loaded. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!--
+  Mermaid + ER Diagram Viewer
+  - Vanilla JS, single file, CDN deps only.
+  - Pinned versions: mermaid@10.9.0, jspdf@2.5.1, svg-pan-zoom@3.6.1
+  - Live render with 600ms debounce; full programmatic control via mermaid.render().
+  - PNG export rasterises the *pristine* SVG (pre-pan-zoom mutation) at N× DPR.
+  - PDF export embeds a 3× JPEG into jsPDF with auto orientation + margins.
+-->
+
+<style>
+:root {
+  --bg-0:#0a0e14; --bg-1:#11161d; --bg-2:#1a2028; --bg-3:#232a35;
+  --border:#2a323d; --border-strong:#3d4754;
+  --text-0:#e6e8eb; --text-1:#a8b0bb; --text-2:#6b7480;
+  --accent:#00D4FF; --accent-hover:#33dfff; --accent-text:#0a0e14;
+  --error:#ff5c5c; --warning:#f5a623;
+  --mono:'JetBrains Mono','SF Mono','Monaco','Cascadia Code','Roboto Mono',Consolas,'Courier New',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --shadow:0 2px 8px rgba(0,0,0,0.4);
+  --grid-line:rgba(255,255,255,0.025);
+  /* The diagram font used by Mermaid for measurement AND rendering.
+     JS updates this when the font selector changes. */
+  --diagram-font:'JetBrains Mono','SF Mono','Monaco','Cascadia Code','Roboto Mono',Consolas,'Courier New',monospace;
+}
+[data-theme="light"] {
+  --bg-0:#ffffff; --bg-1:#f5f7fa; --bg-2:#ebeef2; --bg-3:#dee3ea;
+  --border:#d1d6dd; --border-strong:#b6bdc7;
+  --text-0:#1a1f29; --text-1:#4a5260; --text-2:#7c8593;
+  --accent:#0084c7; --accent-hover:#006ba3; --accent-text:#ffffff;
+  --shadow:0 2px 6px rgba(0,0,0,0.08);
+  --grid-line:rgba(0,0,0,0.04);
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { height:100%; width:100%; overflow:hidden; }
+body {
+  font-family:var(--sans);
+  background:var(--bg-0);
+  color:var(--text-0);
+  font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column;
+}
+
+/* ─── Toolbar ─── */
+.toolbar {
+  display:flex; align-items:center; gap:12px;
+  padding:10px 14px;
+  background:var(--bg-1);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0; z-index:10;
+  flex-wrap:wrap;
+}
+.brand {
+  font-family:var(--mono);
+  font-size:13px; font-weight:600;
+  letter-spacing:1px;
+  color:var(--text-0);
+  text-transform:uppercase;
+  display:flex; align-items:center; gap:8px;
+  padding-right:10px; border-right:1px solid var(--border);
+}
+.brand::before {
+  content:''; display:inline-block;
+  width:8px; height:8px; background:var(--accent);
+}
+.toolbar-group { display:flex; align-items:center; gap:6px; }
+.toolbar-spacer { flex:1; }
+.divider-vert { width:1px; height:22px; background:var(--border); margin:0 4px; }
+.divider-vert.strong { background:var(--border-strong); height:26px; margin:0 8px; }
+
+.group-label {
+  font-family:var(--mono);
+  font-size:9px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  color:var(--text-2);
+  padding:3px 7px;
+  border:1px solid var(--border);
+  background:var(--bg-0);
+  margin-right:2px;
+}
+
+select.wide { min-width:130px; }
+
+button, select {
+  font-family:var(--mono);
+  font-size:11px; font-weight:500;
+  background:var(--bg-2);
+  color:var(--text-0);
+  border:1px solid var(--border);
+  padding:6px 12px;
+  cursor:pointer;
+  transition:background 100ms, border-color 100ms, color 100ms;
+  letter-spacing:0.5px;
+  text-transform:uppercase;
+  border-radius:0;
+}
+button:hover:not(:disabled), select:hover {
+  background:var(--bg-3);
+  border-color:var(--border-strong);
+}
+button:active:not(:disabled) {
+  background:var(--accent);
+  color:var(--accent-text);
+  border-color:var(--accent);
+}
+button:disabled {
+  opacity:0.35;
+  cursor:not-allowed;
+}
+button.primary {
+  background:var(--accent);
+  color:var(--accent-text);
+  border-color:var(--accent);
+  font-weight:700;
+}
+button.primary:hover:not(:disabled) {
+  background:var(--accent-hover);
+  border-color:var(--accent-hover);
+}
+button.icon-btn {
+  padding:6px 10px;
+  min-width:32px;
+  font-size:14px;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+select {
+  -webkit-appearance:none; appearance:none;
+  padding-right:22px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--text-1) 50%),linear-gradient(135deg,var(--text-1) 50%,transparent 50%);
+  background-position:calc(100% - 11px) center,calc(100% - 6px) center;
+  background-size:5px 5px;
+  background-repeat:no-repeat;
+}
+select:focus { outline:1px solid var(--accent); outline-offset:-1px; }
+
+/* ─── Workspace ─── */
+.workspace {
+  flex:1; display:flex; overflow:hidden; min-height:0;
+}
+.input-panel, .preview-panel {
+  display:flex; flex-direction:column;
+  min-height:0; min-width:0;
+}
+.input-panel {
+  width:38%;
+  background:var(--bg-1);
+  border-right:1px solid var(--border);
+}
+.preview-panel { flex:1; background:var(--bg-0); }
+
+.panel-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:7px 12px;
+  background:var(--bg-2);
+  border-bottom:1px solid var(--border);
+  font-family:var(--mono);
+  font-size:10px;
+  text-transform:uppercase;
+  color:var(--text-2);
+  letter-spacing:1px;
+  flex-shrink:0;
+}
+.panel-header .status-ok { color:var(--accent); }
+.panel-header .status-err { color:var(--error); }
+
+.editor {
+  flex:1; width:100%;
+  background:var(--bg-1);
+  color:var(--text-0);
+  border:none; outline:none; resize:none;
+  padding:14px 18px;
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.65;
+  tab-size:2;
+  caret-color:var(--accent);
+  /* Enable JetBrains Mono's programming ligatures: 'liga' = standard
+     ligatures, 'calt' = contextual alternates (the arrow/comparison
+     symbols like ->, =>, !=, ==). */
+  font-feature-settings: 'liga' 1, 'calt' 1;
+  font-variant-ligatures: contextual common-ligatures;
+}
+.editor::selection { background:rgba(0,212,255,0.25); }
+
+.divider {
+  width:5px; background:var(--border);
+  cursor:col-resize; flex-shrink:0;
+  transition:background 100ms;
+}
+.divider:hover, .divider.dragging { background:var(--accent); }
+
+.preview-wrap {
+  flex:1; position:relative; overflow:hidden;
+  background-color:var(--bg-0);
+  background-image:
+    linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+.preview-container {
+  width:100%; height:100%;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+}
+.preview-container svg {
+  width:100%; height:100%;
+  max-width:none; max-height:none;
+  display:block;
+}
+.placeholder {
+  color:var(--text-2);
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0.5px;
+}
+
+/* Spinner */
+.spinner {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(10,14,20,0.4);
+  pointer-events:none;
+  opacity:0; transition:opacity 120ms;
+}
+[data-theme="light"] .spinner { background:rgba(255,255,255,0.6); }
+.spinner.visible { opacity:1; }
+.spinner-dot {
+  width:6px; height:6px;
+  background:var(--accent);
+  margin:0 3px;
+  animation:pulse 1.2s infinite ease-in-out;
+}
+.spinner-dot:nth-child(2) { animation-delay:0.15s; }
+.spinner-dot:nth-child(3) { animation-delay:0.3s; }
+@keyframes pulse {
+  0%,100% { opacity:0.25; transform:scale(1); }
+  50%     { opacity:1;    transform:scale(1.4); }
+}
+
+/* Error block */
+.error-display {
+  margin:20px;
+  padding:14px 18px;
+  background:rgba(255,92,92,0.06);
+  border-left:3px solid var(--error);
+  color:var(--error);
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.5;
+  white-space:pre-wrap;
+  max-width:680px;
+  word-break:break-word;
+}
+.error-display .err-title {
+  font-weight:700; text-transform:uppercase;
+  letter-spacing:1.5px;
+  margin-bottom:8px;
+  font-size:10px;
+}
+
+/* Metadata footer */
+.metadata-footer {
+  padding:7px 14px;
+  background:var(--bg-1);
+  border-top:1px solid var(--border);
+  display:flex; gap:24px;
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--text-2);
+  flex-shrink:0;
+  flex-wrap:wrap;
+}
+.meta-item .label {
+  text-transform:uppercase;
+  letter-spacing:1px;
+  margin-right:6px;
+}
+.meta-item .value {
+  color:var(--text-0);
+  font-weight:500;
+}
+
+/* In-preview zoom widget */
+.zoom-widget {
+  position:absolute;
+  bottom:14px; right:14px;
+  display:flex; gap:0;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  z-index:5;
+}
+.zoom-widget button {
+  border:none; border-right:1px solid var(--border);
+  padding:6px 10px;
+  background:transparent;
+  font-size:13px;
+  min-width:32px;
+}
+.zoom-widget button:last-child { border-right:none; }
+
+/* Warning banner */
+.warning-banner {
+  position:absolute;
+  top:14px; left:50%;
+  transform:translateX(-50%);
+  background:var(--bg-2);
+  border-left:3px solid var(--warning);
+  padding:8px 14px;
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--warning);
+  box-shadow:var(--shadow);
+  z-index:5;
+  max-width:90%;
+}
+
+/* Force the diagram font onto every Mermaid label-bearing element —
+   including the off-DOM measurement nodes Mermaid creates during layout.
+   Without this, measurement happens with the inherited body font (narrow
+   sans glyphs) but rendering uses the configured fontFamily (wider mono
+   glyphs), and boxes end up undersized. The selector is intentionally
+   broad: it catches every label class Mermaid v10 emits, the
+   foreignObject HTML content, and any temporary measurement copies that
+   land in the page DOM. */
+.nodeLabel, .edgeLabel, .label, .labelText, .messageText, .titleText,
+.actor, .actor-line, .classText, .classTitle, .stateLabel,
+.er-label, .er-entityLabel, .er-attribute,
+foreignObject, foreignObject div, foreignObject span, foreignObject p,
+.label foreignObject *, g.label text, g.node text, g.classGroup text {
+  font-family: var(--diagram-font) !important;
+  /* Programming ligatures show up on labels containing `->`, `=>`, `!=`,
+     `==`, etc. — common in code-flavoured flowcharts and sequence diagrams.
+     Harmless on labels that don't contain those sequences. */
+  font-feature-settings: 'liga' 1, 'calt' 1;
+  font-variant-ligatures: contextual common-ligatures;
+}
+
+/* Mobile stacked layout */
+@media (max-width:768px) {
+  .workspace { flex-direction:column; }
+  .input-panel {
+    width:100% !important; height:40%;
+    border-right:none; border-bottom:1px solid var(--border);
+  }
+  .divider { width:100%; height:5px; cursor:row-resize; }
+  .toolbar { gap:6px; padding:8px; }
+  .brand { display:none; }
+}
+</style>
+</head>
+<body data-theme="dark">
+
+<header class="toolbar">
+  <div class="brand">MERMAID</div>
+  <div class="toolbar-group">
+    <button id="renderBtn" class="primary">Render</button>
+    <select id="exampleSelect" class="wide" title="Load example">
+      <option value="">Examples…</option>
+      <option value="er">ER Diagram</option>
+      <option value="flow">Flowchart</option>
+      <option value="seq">Sequence</option>
+      <option value="class">Class</option>
+      <option value="gantt">Gantt</option>
+      <option value="state">State</option>
+    </select>
+  </div>
+  <div class="divider-vert strong"></div>
+  <div class="toolbar-group group-export">
+    <span class="group-label">PNG</span>
+    <button id="exportPng" disabled>Export</button>
+    <select id="resolutionSelect" title="PNG resolution multiplier">
+      <option value="1">1×</option>
+      <option value="2">2×</option>
+      <option value="3" selected>3×</option>
+      <option value="4">4×</option>
+    </select>
+    <select id="pngBgSelect" title="PNG background">
+      <option value="transparent" selected>Transparent</option>
+      <option value="white">White BG</option>
+      <option value="black">Black BG</option>
+    </select>
+  </div>
+  <div class="divider-vert strong"></div>
+  <div class="toolbar-group group-export">
+    <span class="group-label">PDF</span>
+    <button id="exportPdf" disabled>Export</button>
+    <select id="paperSelect" title="PDF paper size">
+      <option value="a4" selected>A4</option>
+      <option value="a3">A3</option>
+      <option value="letter">Letter</option>
+    </select>
+  </div>
+  <div class="toolbar-spacer"></div>
+  <select id="fontSelect" title="Diagram font">
+    <option value="mono" selected>Mono</option>
+    <option value="sans">Sans</option>
+    <option value="serif">Serif</option>
+  </select>
+  <button id="themeToggle" title="Toggle theme">Dark</button>
+</header>
+
+<main class="workspace">
+  <section class="input-panel">
+    <div class="panel-header">
+      <span>// source</span>
+      <span id="charCount">0 chars</span>
+    </div>
+    <textarea id="editor" class="editor" spellcheck="false" placeholder="Paste or type Mermaid diagram source…">erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER {
+        string name
+        string email
+        string phone
+    }
+    ORDER {
+        int orderNumber
+        date orderDate
+        string status
+    }
+    LINE-ITEM {
+        string productName
+        int quantity
+        float unitPrice
+    }</textarea>
+  </section>
+
+  <div class="divider" id="divider"></div>
+
+  <section class="preview-panel">
+    <div class="panel-header">
+      <span>// preview</span>
+      <span id="renderStatus">Ready</span>
+    </div>
+    <div class="preview-wrap">
+      <div id="preview" class="preview-container">
+        <div class="placeholder">// awaiting render…</div>
+      </div>
+      <div id="spinner" class="spinner">
+        <div class="spinner-dot"></div>
+        <div class="spinner-dot"></div>
+        <div class="spinner-dot"></div>
+      </div>
+      <div class="zoom-widget">
+        <button id="zCtrlFit"   title="Fit to screen">⤢</button>
+        <button id="zCtrlOut"   title="Zoom out">−</button>
+        <button id="zCtrlIn"    title="Zoom in">+</button>
+        <button id="zCtrlReset" title="Reset zoom">↺</button>
+      </div>
+    </div>
+    <div class="metadata-footer">
+      <div class="meta-item"><span class="label">Type</span><span class="value" id="metaType">—</span></div>
+      <div class="meta-item"><span class="label">Size</span><span class="value" id="metaSize">—</span></div>
+      <div class="meta-item"><span class="label">Print @ 300dpi</span><span class="value" id="metaPrint">—</span></div>
+      <div class="meta-item"><span class="label">Theme</span><span class="value" id="metaTheme">dark</span></div>
+    </div>
+  </section>
+</main>
+
+<!-- CDN dependencies, pinned -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+
+<script>
+// ============================================================
+// 1. STATE & EXAMPLE SNIPPETS
+// ------------------------------------------------------------
+// `state` is the single source of truth for what's currently rendered.
+// We keep both the live SVG element (mutated by svg-pan-zoom) and the
+// pristine SVG XML string returned by mermaid.render() — the pristine
+// copy is what we rasterise during export so pan/zoom transforms don't
+// leak into the output file.
+// ============================================================
+const state = {
+  theme: 'dark',
+  mermaidTheme: 'dark',
+  font: 'mono',           // 'mono' | 'sans' | 'serif' — applies to preview AND exports
+  pristineSvgXml: null,
+  naturalWidth: 0,
+  naturalHeight: 0,
+  panZoom: null,
+  renderId: 0,
+  hasValidRender: false
+};
+
+// Font stacks. Mermaid measures node sizes from font metrics so changing
+// these triggers a re-render. Mono yields wider boxes (good for code-ish
+// labels); Serif is heavier and suits formal docs.
+const FONT_STACKS = {
+  sans:  "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif",
+  mono:  "'JetBrains Mono', 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace",
+  serif: "Georgia, 'Times New Roman', Cambria, 'Source Serif Pro', serif"
+};
+
+const EXAMPLES = {
+  er: `erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER {
+        string name
+        string email
+    }
+    ORDER {
+        int orderNumber
+        date orderDate
+    }
+    LINE-ITEM {
+        string productName
+        int quantity
+        float price
+    }`,
+  flow: `flowchart TD
+    A[Start] --> B{Authenticated?}
+    B -->|Yes| C[Load Dashboard]
+    B -->|No| D[Show Login]
+    D --> E[Submit Credentials]
+    E --> F{Valid?}
+    F -->|Yes| C
+    F -->|No| D
+    C --> G[End]`,
+  seq: `sequenceDiagram
+    participant Browser
+    participant API
+    participant Auth
+    participant DB
+    Browser->>API: POST /login
+    API->>Auth: validate(creds)
+    Auth->>DB: SELECT user
+    DB-->>Auth: user record
+    Auth-->>API: token
+    API-->>Browser: 200 OK + JWT
+    Note over Browser,API: Subsequent requests carry JWT`,
+  class: `classDiagram
+    class Animal {
+        +String name
+        +int age
+        +makeSound() void
+    }
+    class Dog {
+        +String breed
+        +bark() void
+    }
+    class Cat {
+        +bool indoor
+        +meow() void
+    }
+    class Trainer {
+        +train(Animal) void
+    }
+    Animal <|-- Dog
+    Animal <|-- Cat
+    Trainer ..> Animal : trains`,
+  gantt: `gantt
+    title Q3 Product Launch
+    dateFormat YYYY-MM-DD
+    section Design
+    Wireframes      :a1, 2026-07-01, 7d
+    Mockups         :a2, after a1, 5d
+    Design review   :a3, after a2, 2d
+    section Engineering
+    Frontend build  :b1, after a3, 14d
+    Backend build   :b2, after a3, 21d
+    Integration     :b3, after b1, 5d
+    section Launch
+    QA              :c1, after b3, 5d
+    Beta release    :c2, after c1, 3d
+    GA              :milestone, after c2, 0d`,
+  state: `stateDiagram-v2
+    [*] --> Idle
+    Idle --> Loading : fetch
+    Loading --> Success : 200
+    Loading --> Error : 4xx/5xx
+    Success --> Idle : reset
+    Error --> Loading : retry
+    Error --> Idle : cancel
+    Success --> [*]`
+};
+
+// ============================================================
+// 2. MERMAID INITIALISATION
+// ------------------------------------------------------------
+// startOnLoad:false — we drive rendering ourselves.
+// useMaxWidth:false on every diagram type so SVGs come out with explicit
+// pixel dimensions, which is what svg-pan-zoom and the export pipeline need.
+// ============================================================
+// Single source of truth for Mermaid config. Both the preview path
+// (initMermaid) and the export path (renderWithTheme) call this so they
+// can't drift out of sync.
+//
+// Monospace handling: Mermaid measures text width during layout to size
+// boxes, but its measurement path can use a narrower fallback font when
+// the configured fontFamily isn't applied to the measurement element yet.
+// With mono that mismatch causes glyphs to overflow the box. The fix is
+// to (a) also set themeVariables.fontFamily (Mermaid uses this in its
+// injected stylesheet for both measurement and render), (b) shave a
+// couple of pixels off the font size, and (c) bump per-diagram padding
+// to give wider glyphs breathing room.
+// htmlLabels toggle controls how Mermaid renders text:
+//   true  → wraps text in <foreignObject>/HTML <div>; boxes auto-fit the
+//           actual rendered glyphs (correct for *any* font, including
+//           monospace which is wider than Mermaid's SVG-text estimate).
+//   false → plain SVG <text>; safe to rasterise to canvas without taint.
+//
+// We use true for the preview (so the user sees properly-fitted boxes)
+// and false in the export path (so PNG/PDF rasterisation succeeds).
+function buildMermaidConfig(theme, htmlLabels) {
+  const fontFamily = FONT_STACKS[state.font] || FONT_STACKS.sans;
+  const isMono     = state.font === 'mono';
+  const fontSize   = isMono ? '13px' : '16px';
+  const pad        = isMono ? 14    : 8;
+
+  return {
+    startOnLoad: false,
+    theme: theme,
+    securityLevel: 'loose',
+    fontFamily: fontFamily,
+    themeVariables: {
+      fontFamily: fontFamily,
+      fontSize:   fontSize
+    },
+    er:        { useMaxWidth: false },
+    flowchart: { useMaxWidth: false, htmlLabels: htmlLabels, curve: 'basis', padding: pad, nodeSpacing: isMono ? 60 : 50, rankSpacing: isMono ? 60 : 50 },
+    sequence:  { useMaxWidth: false, htmlLabels: htmlLabels, boxMargin: pad, noteMargin: pad },
+    gantt:     { useMaxWidth: false },
+    class:     { useMaxWidth: false, htmlLabels: htmlLabels, padding: pad },
+    state:     { useMaxWidth: false, htmlLabels: htmlLabels, padding: pad }
+  };
+}
+
+// Push the chosen font into the page-scope CSS variable so Mermaid's
+// off-DOM measurement elements (which inherit page CSS) use the same
+// font as the final SVG render. This is what actually fixes mono
+// overflow — Mermaid's `fontFamily` config alone doesn't reach the
+// measurement element's effective style.
+function applyDiagramFontVar() {
+  document.documentElement.style.setProperty(
+    '--diagram-font',
+    FONT_STACKS[state.font] || FONT_STACKS.sans
+  );
+}
+
+function initMermaid() {
+  applyDiagramFontVar();
+  // Preview: htmlLabels=true so boxes correctly hug the rendered text.
+  mermaid.initialize(buildMermaidConfig(state.mermaidTheme, true));
+}
+initMermaid();
+
+// ============================================================
+// 3. DOM HOOKS & INPUT WIRING
+// ------------------------------------------------------------
+// 600ms debounced live render: every keystroke restarts the timer.
+// ============================================================
+const editor       = document.getElementById('editor');
+const preview      = document.getElementById('preview');
+const spinner      = document.getElementById('spinner');
+const renderStatus = document.getElementById('renderStatus');
+const charCount    = document.getElementById('charCount');
+
+let debounceTimer = null;
+function scheduleRender() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(renderDiagram, 600);
+}
+
+// Tracks which example is currently loaded verbatim in the editor.
+// Cleared whenever the user edits the source, so the dropdown stops
+// claiming an example that no longer matches what's typed.
+let loadedExample = '';
+
+editor.addEventListener('input', () => {
+  charCount.textContent = `${editor.value.length} chars`;
+  if (loadedExample && editor.value !== EXAMPLES[loadedExample]) {
+    document.getElementById('exampleSelect').value = '';
+    loadedExample = '';
+  }
+  scheduleRender();
+});
+
+document.getElementById('renderBtn').addEventListener('click', () => {
+  clearTimeout(debounceTimer);
+  renderDiagram();
+});
+
+// ============================================================
+// 4. CORE RENDER PIPELINE
+// ------------------------------------------------------------
+// renderId guards against race conditions: if a slow render finishes
+// after a newer one started, we discard the stale result.
+// ============================================================
+async function renderDiagram() {
+  const src = editor.value.trim();
+  if (!src) {
+    preview.innerHTML = '<div class="placeholder">// no source</div>';
+    setExportEnabled(false);
+    updateMetadata(null, '');
+    state.hasValidRender = false;
+    return;
+  }
+
+  const renderId = ++state.renderId;
+  showSpinner(true);
+  renderStatus.textContent = 'Rendering…';
+  renderStatus.className = '';
+
+  try {
+    // mermaid v10: render(id, src) returns Promise<{svg, bindFunctions}>
+    const result = await mermaid.render(`mmd-${Date.now()}-${renderId}`, src);
+    if (renderId !== state.renderId) return; // a newer render started; bail
+
+    const svgXml = result.svg;
+    state.pristineSvgXml = svgXml;
+
+    preview.innerHTML = svgXml;
+    if (result.bindFunctions) {
+      try { result.bindFunctions(preview); } catch (e) { /* non-fatal */ }
+    }
+
+    const svgEl = preview.querySelector('svg');
+    if (!svgEl) throw new Error('Mermaid produced no SVG');
+
+    normaliseSvg(svgEl);
+    state.naturalWidth  = parseFloat(svgEl.dataset.naturalWidth);
+    state.naturalHeight = parseFloat(svgEl.dataset.naturalHeight);
+    state.hasValidRender = true;
+
+    // Grow any undersized rectangular boxes to fit their text. Must run
+    // BEFORE initPanZoom, which wraps content in a transformed <g> and
+    // would skew measurements.
+    fitBoxesToText(svgEl);
+
+    initPanZoom(svgEl);
+    updateMetadata(svgEl, src);
+    setExportEnabled(true);
+
+    renderStatus.textContent = 'Rendered ✓';
+    renderStatus.className = 'status-ok';
+  } catch (err) {
+    console.error('Mermaid render error:', err);
+    const message = (err && err.message) ? err.message : String(err);
+    preview.innerHTML =
+      `<div class="error-display"><div class="err-title">// render error</div>${escapeHtml(message)}</div>`;
+    state.pristineSvgXml = null;
+    state.hasValidRender = false;
+    setExportEnabled(false);
+    updateMetadata(null, '');
+    renderStatus.textContent = 'Error';
+    renderStatus.className = 'status-err';
+  } finally {
+    showSpinner(false);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Mermaid emits style="max-width:..." which interferes with rasterisation
+// and constrains pan/zoom. We:
+//   1. Determine natural dimensions from viewBox (preferred) or attrs.
+//   2. Stash them on dataset for export + metadata.
+//   3. Ensure a viewBox is present (svg-pan-zoom needs it for proper zoom).
+//   4. Set width/height to 100% so the SVG fills the preview container —
+//      this is what gives svg-pan-zoom the full viewport to pan/zoom into.
+//      Without this, the SVG element itself acts as a clipping mask and
+//      content gets cut at the natural-size boundary when zoomed in.
+function normaliseSvg(svg) {
+  const vb = svg.getAttribute('viewBox');
+  let w, h;
+  if (vb) {
+    const parts = vb.split(/[ ,]+/).map(Number);
+    w = parts[2]; h = parts[3];
+  } else {
+    w = parseFloat(svg.getAttribute('width'))  || 800;
+    h = parseFloat(svg.getAttribute('height')) || 600;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  }
+  svg.setAttribute('width',  '100%');
+  svg.setAttribute('height', '100%');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.style.maxWidth  = 'none';
+  svg.style.maxHeight = 'none';
+  svg.style.display   = 'block';
+  svg.dataset.naturalWidth  = w;
+  svg.dataset.naturalHeight = h;
+}
+
+// Direct answer to "boxes should grow with text": after Mermaid renders,
+// we measure each node's actual rendered HTML content and, if it differs
+// from what Mermaid sized everything for, we:
+//   1. resize the foreignObject to match the real content,
+//   2. recenter the inner `g.label` so the text is visually centred,
+//   3. resize the surrounding shape with shape-specific geometry.
+//
+// Each shape has its own resize math:
+//   rect / rounded rect → grow x/width/y/height symmetrically
+//   circle              → r = half-diagonal of the text rect
+//   ellipse             → semi-axes scaled by √2 (inscribed rect)
+//   polygon             → scale points outward by a shape-aware factor
+//                          (diamonds need ~2× bbox, hexagons ~1.15×)
+//   path                → skipped (cylinders, custom shapes need
+//                          dedicated path-rewriting logic)
+//
+// To make getBoundingClientRect match SVG user units 1:1, we briefly
+// force the SVG back to its natural pixel size while measuring.
+function fitBoxesToText(svgEl) {
+  const naturalW = parseFloat(svgEl.dataset.naturalWidth);
+  const naturalH = parseFloat(svgEl.dataset.naturalHeight);
+  if (!naturalW || !naturalH) return;
+
+  const savedCss = svgEl.style.cssText;
+  svgEl.style.width     = naturalW + 'px';
+  svgEl.style.height    = naturalH + 'px';
+  svgEl.style.maxWidth  = 'none';
+  svgEl.style.maxHeight = 'none';
+  void svgEl.getBoundingClientRect(); // force reflow
+
+  const padding = 10;
+  try {
+    // Flowchart / state / class nodes (foreignObject + shape).
+    svgEl.querySelectorAll('g.node, g.flowchart-label').forEach(node => fitOneNode(node, padding));
+    // Sequence diagrams — notes and actor boxes use SVG <text>, not HTML.
+    fitSequenceBoxes(svgEl, padding);
+  } finally {
+    svgEl.style.cssText = savedCss;
+  }
+}
+
+function fitOneNode(node, padding) {
+  let actualW, actualH;
+
+  // Preview path: htmlLabels:true → text lives inside <foreignObject>,
+  // measure the inner HTML element with getBoundingClientRect.
+  const fo = node.querySelector('foreignObject');
+  if (fo && fo.firstElementChild) {
+    const bcr = fo.firstElementChild.getBoundingClientRect();
+    if (bcr.width && bcr.height) {
+      actualW = bcr.width;
+      actualH = bcr.height;
+    }
+  }
+
+  // Export path: htmlLabels:false → text is plain SVG <text>, measure
+  // with getBBox (returns SVG user-space units directly).
+  if (!actualW) {
+    const text = node.querySelector('text');
+    if (text) {
+      try {
+        const bbox = text.getBBox();
+        if (bbox.width && bbox.height) {
+          actualW = bbox.width;
+          actualH = bbox.height;
+        }
+      } catch (e) { /* element not laid out yet — bail */ }
+    }
+  }
+
+  if (!actualW || !actualH) return;
+
+  // We deliberately DON'T touch the foreignObject, the label group, or
+  // the inner label-background rect:
+  //   - foreignObject is already sized from Mermaid's HTML measurement
+  //     (correct for any font when htmlLabels:true).
+  //   - The label group transform was set from the same correct HTML
+  //     measurement, so text is already centred at (0,0) of the node.
+  //   - The inner label-background rect is part of Mermaid's intended
+  //     visual (visible fill in state diagrams) — resizing it produces
+  //     an extra phantom bounding box.
+  //
+  // The ONLY thing wrong is the outer shape, which Mermaid sizes via a
+  // separate SVG-text estimate that undershoots for monospace. So we
+  // grow only that.
+
+  const needW = actualW + padding * 2;
+  const needH = actualH + padding;
+
+  let polygon, circle, ellipse, outerRect;
+  for (const child of node.children) {
+    const tag = (child.tagName || '').toLowerCase();
+    if      (tag === 'polygon' && !polygon)  polygon  = child;
+    else if (tag === 'circle'  && !circle)   circle   = child;
+    else if (tag === 'ellipse' && !ellipse)  ellipse  = child;
+    else if (tag === 'rect'    && !outerRect) outerRect = child;
+    // <path> shapes (e.g. cylinder) are left alone — they need
+    // shape-specific path rewriting.
+  }
+
+  if (polygon)        resizePolygon(polygon, needW, needH);
+  else if (circle)    resizeCircle(circle,  needW, needH);
+  else if (ellipse)   resizeEllipse(ellipse, needW, needH);
+  else if (outerRect) resizeRect(outerRect, needW, needH);
+}
+
+// Sequence diagrams don't use foreignObject — they use plain SVG <text>.
+// We find each note / actor rect, measure its associated text via
+// getBBox() (SVG-native, returns user-space units), and grow the rect if
+// it doesn't contain the text. Symmetric growth keeps the rect centred
+// on the same point, so the text doesn't need to be repositioned.
+function fitSequenceBoxes(svgEl, padding) {
+  // Notes: <rect class="note"> with sibling/nearby <text>
+  svgEl.querySelectorAll('rect.note').forEach(rect => fitSvgTextBox(rect, padding));
+  // Actors (top + bottom boxes): <rect class="actor">
+  svgEl.querySelectorAll('rect.actor').forEach(rect => fitSvgTextBox(rect, padding));
+}
+
+function fitSvgTextBox(rect, padding) {
+  // Find the text element that belongs to this rect. Mermaid usually
+  // emits the rect immediately followed by the text in document order,
+  // both either as siblings or under the same parent group.
+  let text = null;
+  const parent = rect.parentElement;
+  if (parent) {
+    // Prefer a known class, then any text sibling/descendant.
+    text = parent.querySelector('text.noteText, text.actor, text.actor-line');
+    if (!text) {
+      // Walk forward siblings looking for the next <text>.
+      let s = rect.nextElementSibling;
+      while (s) {
+        if ((s.tagName || '').toLowerCase() === 'text') { text = s; break; }
+        s = s.nextElementSibling;
+      }
+    }
+  }
+  if (!text) return;
+
+  let bbox;
+  try { bbox = text.getBBox(); } catch (e) { return; }
+  if (!bbox.width || !bbox.height) return;
+
+  const needW = bbox.width  + padding * 2;
+  const needH = bbox.height + padding;
+
+  const rw = parseFloat(rect.getAttribute('width'))  || 0;
+  const rh = parseFloat(rect.getAttribute('height')) || 0;
+  const rx = parseFloat(rect.getAttribute('x'))      || 0;
+  const ry = parseFloat(rect.getAttribute('y'))      || 0;
+
+  if (needW > rw + 0.5) {
+    rect.setAttribute('x',     rx - (needW - rw) / 2);
+    rect.setAttribute('width', needW);
+  }
+  if (needH > rh + 0.5) {
+    rect.setAttribute('y',      ry - (needH - rh) / 2);
+    rect.setAttribute('height', needH);
+  }
+}
+
+// Symmetric rect grow around its current centre.
+function resizeRect(rect, needW, needH) {
+  const x = parseFloat(rect.getAttribute('x')) || 0;
+  const y = parseFloat(rect.getAttribute('y')) || 0;
+  const w = parseFloat(rect.getAttribute('width'))  || 0;
+  const h = parseFloat(rect.getAttribute('height')) || 0;
+  if (needW > w + 0.5) {
+    rect.setAttribute('x',     x - (needW - w) / 2);
+    rect.setAttribute('width', needW);
+  }
+  if (needH > h + 0.5) {
+    rect.setAttribute('y',      y - (needH - h) / 2);
+    rect.setAttribute('height', needH);
+  }
+}
+
+// For a circle to contain an axis-aligned text rect, r must reach the
+// rect's corner: r ≥ ½·√(W² + H²). Mermaid centres circles at (0,0)
+// of the node, so cx/cy don't need to change.
+function resizeCircle(circle, needW, needH) {
+  const r = parseFloat(circle.getAttribute('r')) || 0;
+  const needR = Math.sqrt(needW * needW + needH * needH) / 2;
+  if (needR > r + 0.5) circle.setAttribute('r', needR);
+}
+
+// Inscribed-rectangle relation for an ellipse with semi-axes rx, ry:
+//   (W/2)² / rx² + (H/2)² / ry² ≤ 1
+// Pick rx, ry that satisfy this with a balanced split → rx ≥ W/√2,
+// ry ≥ H/√2 (corner check: ½ + ½ = 1).
+function resizeEllipse(ellipse, needW, needH) {
+  const rx = parseFloat(ellipse.getAttribute('rx')) || 0;
+  const ry = parseFloat(ellipse.getAttribute('ry')) || 0;
+  const needRx = (needW / 2) * Math.SQRT2;
+  const needRy = (needH / 2) * Math.SQRT2;
+  if (needRx > rx + 0.5) ellipse.setAttribute('rx', needRx);
+  if (needRy > ry + 0.5) ellipse.setAttribute('ry', needRy);
+}
+
+// Polygons cover diamonds, hexagons, parallelograms, trapezoids, etc.
+// Each has a different relationship between its bounding box and the
+// rectangle that can be inscribed inside the shape:
+//   4-point diamond → bbox must be 2× text size (inscribed-rect relation
+//                     W/bbox_W + H/bbox_H = 1 at corner; the simplest
+//                     solution is bbox = 2 × text).
+//   6-point hexagon → ~1.15× is enough (text fits the central rectangle
+//                     between the slanted sides).
+//   anything else   → conservative 1.3× as a generic safety factor.
+// We scale all points outward from the polygon's bounding-box centre,
+// which preserves the shape and keeps it centred at (0,0) of the node.
+function resizePolygon(polygon, needW, needH) {
+  const pointsStr = polygon.getAttribute('points') || '';
+  const tokens = pointsStr.split(/[\s,]+/).filter(Boolean).map(Number).filter(n => !isNaN(n));
+  if (tokens.length < 6 || tokens.length % 2 !== 0) return;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < tokens.length; i += 2) {
+    if (tokens[i]   < minX) minX = tokens[i];
+    if (tokens[i]   > maxX) maxX = tokens[i];
+    if (tokens[i+1] < minY) minY = tokens[i+1];
+    if (tokens[i+1] > maxY) maxY = tokens[i+1];
+  }
+  const curW = maxX - minX, curH = maxY - minY;
+  if (!curW || !curH) return;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+
+  const n = tokens.length / 2;
+  const inflate = (n === 4) ? 2.0
+               : (n === 6) ? 1.15
+               :              1.3;
+
+  const targetW = needW * inflate;
+  const targetH = needH * inflate;
+  if (targetW <= curW + 0.5 && targetH <= curH + 0.5) return;
+
+  const sx = Math.max(1, targetW / curW);
+  const sy = Math.max(1, targetH / curH);
+
+  const out = [];
+  for (let i = 0; i < tokens.length; i += 2) {
+    const nx = (tokens[i]   - cx) * sx + cx;
+    const ny = (tokens[i+1] - cy) * sy + cy;
+    out.push(`${nx.toFixed(2)},${ny.toFixed(2)}`);
+  }
+  polygon.setAttribute('points', out.join(' '));
+}
+
+function showSpinner(on) { spinner.classList.toggle('visible', on); }
+
+function setExportEnabled(enabled) {
+  document.getElementById('exportPng').disabled = !enabled;
+  document.getElementById('exportPdf').disabled = !enabled;
+}
+
+// ============================================================
+// 5. PAN / ZOOM
+// ------------------------------------------------------------
+// svg-pan-zoom mutates the SVG (wraps content in a viewport <g>). We
+// always destroy the prior instance before re-binding to a fresh SVG.
+// ============================================================
+function initPanZoom(svg) {
+  if (state.panZoom) {
+    try { state.panZoom.destroy(); } catch (e) { /* ignore */ }
+    state.panZoom = null;
+  }
+  state.panZoom = svgPanZoom(svg, {
+    zoomEnabled: true,
+    panEnabled: true,
+    controlIconsEnabled: false,
+    fit: true,
+    center: true,
+    minZoom: 0.1,
+    maxZoom: 20,
+    zoomScaleSensitivity: 0.3
+  });
+}
+
+function withPanZoom(fn) {
+  return () => { if (state.panZoom) fn(state.panZoom); };
+}
+// Zoom controls — single set, floating bottom-right of the preview pane.
+document.getElementById('zCtrlFit')  .addEventListener('click', withPanZoom(p => { p.resize(); p.fit(); p.center(); }));
+document.getElementById('zCtrlOut')  .addEventListener('click', withPanZoom(p => p.zoomOut()));
+document.getElementById('zCtrlIn')   .addEventListener('click', withPanZoom(p => p.zoomIn()));
+document.getElementById('zCtrlReset').addEventListener('click', withPanZoom(p => { p.resetZoom(); p.center(); }));
+
+// ============================================================
+// 6. METADATA FOOTER
+// ============================================================
+function updateMetadata(svg, src) {
+  const t  = document.getElementById('metaType');
+  const sz = document.getElementById('metaSize');
+  const pr = document.getElementById('metaPrint');
+  if (!svg) {
+    t.textContent = sz.textContent = pr.textContent = '—';
+    return;
+  }
+  t.textContent  = inferDiagramType(src);
+  const w = state.naturalWidth, h = state.naturalHeight;
+  // The pixel size shown is the SVG's natural dimensions — i.e. what a
+  // 1× PNG export would produce. Higher resolution multipliers scale this
+  // up proportionally (2× → double, 3× → triple, etc.).
+  sz.textContent = `${Math.round(w)} × ${Math.round(h)} px @1×`;
+  // 300 DPI print size: inches = px / 300
+  const winch = (w / 300).toFixed(2);
+  const hinch = (h / 300).toFixed(2);
+  const wmm   = (w / 300 * 25.4).toFixed(0);
+  const hmm   = (h / 300 * 25.4).toFixed(0);
+  pr.textContent = `${winch}″ × ${hinch}″ (${wmm}×${hmm} mm)`;
+}
+
+function inferDiagramType(src) {
+  const first = src.trim().split(/\r?\n/)[0].trim().toLowerCase();
+  const map = [
+    ['erdiagram',       'ER Diagram'],
+    ['flowchart',       'Flowchart'],
+    ['graph',           'Flowchart'],
+    ['sequencediagram', 'Sequence'],
+    ['classdiagram',    'Class'],
+    ['gantt',           'Gantt'],
+    ['statediagram',    'State'],
+    ['pie',             'Pie'],
+    ['journey',         'User Journey'],
+    ['mindmap',         'Mindmap'],
+    ['timeline',        'Timeline'],
+    ['quadrantchart',   'Quadrant']
+  ];
+  for (const [k, label] of map) if (first.startsWith(k)) return label;
+  return 'Unknown';
+}
+
+// ============================================================
+// 7. EXAMPLES & THEME TOGGLE
+// ------------------------------------------------------------
+// Theme toggle re-initialises Mermaid (its colours are baked into the SVG
+// at render time) and re-renders the current source.
+// ============================================================
+document.getElementById('exampleSelect').addEventListener('change', e => {
+  const v = e.target.value;
+  if (!v || !EXAMPLES[v]) return;
+  editor.value = EXAMPLES[v];
+  charCount.textContent = `${editor.value.length} chars`;
+  loadedExample = v;             // remember it so the dropdown label persists
+  clearTimeout(debounceTimer);
+  renderDiagram();
+});
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  state.mermaidTheme = state.theme === 'dark' ? 'dark' : 'default';
+  document.body.dataset.theme = state.theme;
+  document.getElementById('themeToggle').textContent = state.theme[0].toUpperCase() + state.theme.slice(1);
+  document.getElementById('metaTheme').textContent = state.theme;
+  initMermaid();
+  if (state.hasValidRender || editor.value.trim()) renderDiagram();
+});
+
+// Font change: re-init Mermaid with the new fontFamily, then re-render.
+// The export pipeline reads state.font too, so PNG/PDF outputs stay in sync.
+document.getElementById('fontSelect').addEventListener('change', e => {
+  state.font = e.target.value;
+  initMermaid();
+  if (state.hasValidRender || editor.value.trim()) renderDiagram();
+});
+
+// ============================================================
+// 8. SPLIT-PANE DIVIDER (HORIZONTAL on desktop, VERTICAL on mobile)
+// ============================================================
+const divider    = document.getElementById('divider');
+const inputPanel = document.querySelector('.input-panel');
+let dragging = false;
+
+divider.addEventListener('mousedown', e => {
+  dragging = true;
+  divider.classList.add('dragging');
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  document.body.style.cursor = isMobile ? 'row-resize' : 'col-resize';
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const ws = document.querySelector('.workspace').getBoundingClientRect();
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  if (isMobile) {
+    const pct = ((e.clientY - ws.top) / ws.height) * 100;
+    inputPanel.style.height = `${Math.max(15, Math.min(85, pct))}%`;
+  } else {
+    const pct = ((e.clientX - ws.left) / ws.width) * 100;
+    inputPanel.style.width = `${Math.max(15, Math.min(85, pct))}%`;
+  }
+  if (state.panZoom) state.panZoom.resize();
+});
+window.addEventListener('mouseup', () => {
+  if (!dragging) return;
+  dragging = false;
+  divider.classList.remove('dragging');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+});
+
+window.addEventListener('resize', () => {
+  if (state.panZoom) {
+    try { state.panZoom.resize(); state.panZoom.fit(); state.panZoom.center(); } catch (e) {}
+  }
+});
+
+// ============================================================
+// 9. EXPORT — RASTERISE SVG → CANVAS
+// ------------------------------------------------------------
+// We rasterise the *pristine* SVG XML returned by mermaid.render()
+// (not the live DOM SVG, which has been mutated by svg-pan-zoom).
+// Mermaid embeds its own <style> block inside the SVG, so the output
+// is fully self-contained — no external CSS to inline.
+//
+// Pipeline: pristine XML → DOMParser → set width/height → XMLSerializer
+//   → SVG Blob URL → <img>.src → drawImage onto a high-DPI canvas.
+// We pre-fill the canvas with the theme background so transparency
+// doesn't surprise the user (and JPEG, lacking alpha, looks correct).
+// ============================================================
+// Re-render the current source with a specific Mermaid theme. Mermaid bakes
+// node/edge/box colours into the SVG at render time, so to make exported
+// elements match the chosen export background (not just the canvas), we
+// re-render fresh with the right theme. We restore the preview theme in a
+// `finally` so the live view is unaffected.
+async function renderWithTheme(theme) {
+  const src = editor.value.trim();
+  if (!src) throw new Error('No diagram source');
+
+  // Export: htmlLabels=false so the resulting SVG contains no
+  // <foreignObject> and the canvas isn't tainted during rasterisation.
+  mermaid.initialize(buildMermaidConfig(theme, false));
+
+  let result;
+  try {
+    result = await mermaid.render(`mmd-export-${Date.now()}-${Math.floor(Math.random()*1e6)}`, src);
+  } finally {
+    initMermaid(); // restore the preview theme no matter what
+  }
+
+  const svgXml = result.svg;
+  const doc = new DOMParser().parseFromString(svgXml, 'image/svg+xml');
+  const root = doc.documentElement;
+  let w, h;
+  const vb = root.getAttribute('viewBox');
+  if (vb) {
+    const parts = vb.split(/[ ,]+/).map(Number);
+    w = parts[2]; h = parts[3];
+  } else {
+    w = parseFloat(root.getAttribute('width'))  || 800;
+    h = parseFloat(root.getAttribute('height')) || 600;
+  }
+  return { svgXml, w, h };
+}
+
+// background: 'transparent' | any CSS colour string (e.g. '#ffffff', '#000000').
+// We pick a Mermaid theme that matches the chosen background so node fills,
+// stroke colours, and label text are all coherent with the canvas — not just
+// the canvas itself but every element rendered onto it.
+async function rasterise(scale, background) {
+  // Pick a Mermaid theme that visually pairs with the chosen background.
+  // Transparent: use the light ('default') theme — exports get composited
+  // onto unknown backdrops (docs, Slack, presentations) and dark-on-light
+  // strokes/text survive that better than light-on-dark, which goes
+  // invisible against any pale backdrop.
+  let exportTheme;
+  if (background === '#000000')       exportTheme = 'dark';
+  else                                 exportTheme = 'default';
+
+  const { svgXml, w, h } = await renderWithTheme(exportTheme);
+
+  // Mount in a hidden offscreen sandbox. fitBoxesToText() relies on
+  // getBBox / getBoundingClientRect, which only return real values once
+  // the SVG is in a laid-out DOM. DOMParser alone won't do.
+  const sandbox = document.createElement('div');
+  sandbox.style.cssText = 'position:fixed; left:-99999px; top:0; pointer-events:none;';
+  document.body.appendChild(sandbox);
+  sandbox.innerHTML = svgXml;
+
+  let xml;
+  try {
+    const svg = sandbox.querySelector('svg');
+    if (!svg) throw new Error('renderWithTheme produced no SVG');
+
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    svg.setAttribute('width',  w);
+    svg.setAttribute('height', h);
+    svg.style.width      = w + 'px';
+    svg.style.height     = h + 'px';
+    svg.style.maxWidth   = 'none';
+    svg.style.maxHeight  = 'none';
+    svg.dataset.naturalWidth  = w;
+    svg.dataset.naturalHeight = h;
+
+    // Drop Mermaid's max-width / background-color so the chosen export
+    // background takes effect without conflict.
+    if (svg.hasAttribute('style')) {
+      let s = svg.getAttribute('style');
+      s = s.replace(/max-width:[^;]+;?/gi, '');
+      s = s.replace(/background(-color)?:[^;]+;?/gi, '');
+      svg.setAttribute('style', s);
+    }
+
+    // Force a layout pass, then run the same box-fit as the preview.
+    // fitOneNode auto-detects foreignObject vs SVG <text>, so it works
+    // for the export's htmlLabels:false output as well as the preview's
+    // htmlLabels:true output.
+    void svg.getBoundingClientRect();
+    fitBoxesToText(svg);
+
+    xml = new XMLSerializer().serializeToString(svg);
+  } finally {
+    sandbox.remove();
+  }
+
+  const fullXml = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml;
+  const blob = new Blob([fullXml], { type: 'image/svg+xml;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload  = () => resolve();
+    img.onerror = () => reject(new Error('Failed to load serialised SVG into <img>'));
+    img.src = url;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.ceil(w * scale);
+  canvas.height = Math.ceil(h * scale);
+  const ctx = canvas.getContext('2d');
+
+  // Fill background unless caller asked for transparent.
+  // Canvases start fully transparent, so skipping the fillRect gives us
+  // a transparent PNG. JPEG (used by PDF) has no alpha — callers must
+  // pass a solid colour for PDF, never 'transparent'.
+  if (background && background !== 'transparent') {
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Spec: ctx.scale(N, N) then drawImage at natural size.
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, 0, 0, w, h);
+
+  URL.revokeObjectURL(url);
+  return canvas;
+}
+
+// ============================================================
+// 10. EXPORT — PNG
+// ============================================================
+// Map dropdown choice to either the literal 'transparent' or a hex colour.
+// Independent of light/dark theme — the user picks the export background.
+const PNG_BG = { transparent: 'transparent', white: '#ffffff', black: '#000000' };
+
+document.getElementById('exportPng').addEventListener('click', async () => {
+  if (!state.hasValidRender) return;
+  const scale = parseInt(document.getElementById('resolutionSelect').value, 10) || 3;
+  const bgKey = document.getElementById('pngBgSelect').value;
+  const background = PNG_BG[bgKey] || 'transparent';
+  try {
+    renderStatus.textContent = `Exporting PNG (${scale}×, ${bgKey})…`;
+    renderStatus.className = '';
+    showSpinner(true);
+
+    const canvas = await rasterise(scale, background);
+    let url;
+    try { url = canvas.toDataURL('image/png'); }
+    catch (e) {
+      throw new Error('Canvas was tainted (likely <foreignObject> content). Try a different diagram type or simplify labels.');
+    }
+    triggerDownload(url, `diagram-${stamp()}.png`);
+
+    renderStatus.textContent = `PNG exported ✓ (${canvas.width}×${canvas.height}, ${bgKey})`;
+    renderStatus.className = 'status-ok';
+  } catch (err) {
+    console.error('PNG export failed:', err);
+    renderStatus.textContent = 'PNG export failed';
+    renderStatus.className = 'status-err';
+    alert('PNG export failed: ' + err.message);
+  } finally {
+    showSpinner(false);
+  }
+});
+
+// ============================================================
+// 11. EXPORT — PDF
+// ------------------------------------------------------------
+// Approach: 3× canvas → JPEG @ 0.95 → embed in jsPDF.
+// Auto-orientation chooses landscape iff width > height.
+// 15mm margins on all sides; image scaled to fit and centred.
+// ============================================================
+const PAPER_MM = {
+  a4:     { w: 210,   h: 297   },
+  a3:     { w: 297,   h: 420   },
+  letter: { w: 215.9, h: 279.4 }
+};
+
+document.getElementById('exportPdf').addEventListener('click', async () => {
+  if (!state.hasValidRender) return;
+  try {
+    renderStatus.textContent = 'Exporting PDF…';
+    renderStatus.className = '';
+    showSpinner(true);
+
+    // 3× rasterisation for print quality. PDFs are documents, so always
+    // render onto white regardless of preview theme.
+    const canvas = await rasterise(3, '#ffffff');
+    let jpeg;
+    try { jpeg = canvas.toDataURL('image/jpeg', 0.95); }
+    catch (e) {
+      throw new Error('Canvas was tainted (likely <foreignObject> content). Try a different diagram type or simplify labels.');
+    }
+
+    const naturalW = state.naturalWidth;
+    const naturalH = state.naturalHeight;
+    const orientation = naturalW > naturalH ? 'landscape' : 'portrait';
+
+    const paperKey = document.getElementById('paperSelect').value;
+    const paper = PAPER_MM[paperKey];
+    const pageW = orientation === 'landscape' ? paper.h : paper.w;
+    const pageH = orientation === 'landscape' ? paper.w : paper.h;
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation,
+      unit: 'mm',
+      format: paperKey === 'letter' ? 'letter' : paperKey
+    });
+
+    const margin = 15;
+    const printableW = pageW - margin * 2;
+    const printableH = pageH - margin * 2;
+
+    // Fit canvas inside printable area, preserving aspect ratio.
+    const aspect = canvas.width / canvas.height;
+    let drawW = printableW;
+    let drawH = drawW / aspect;
+    if (drawH > printableH) {
+      drawH = printableH;
+      drawW = drawH * aspect;
+    }
+    const x = (pageW - drawW) / 2;
+    const y = (pageH - drawH) / 2;
+
+    pdf.addImage(jpeg, 'JPEG', x, y, drawW, drawH, undefined, 'FAST');
+    pdf.save(`diagram-${stamp()}.pdf`);
+
+    renderStatus.textContent = `PDF exported ✓ (${paperKey.toUpperCase()}, ${orientation})`;
+    renderStatus.className = 'status-ok';
+  } catch (err) {
+    console.error('PDF export failed:', err);
+    renderStatus.textContent = 'PDF export failed';
+    renderStatus.className = 'status-err';
+    alert('PDF export failed: ' + err.message);
+  } finally {
+    showSpinner(false);
+  }
+});
+
+// ============================================================
+// 12. UTILITIES
+// ============================================================
+function triggerDownload(href, filename) {
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function stamp() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+// ============================================================
+// 13. INITIAL RENDER
+// ============================================================
+charCount.textContent = `${editor.value.length} chars`;
+// Defer initial render until JetBrains Mono is actually loaded — otherwise
+// Mermaid's first text-width measurement runs against the system fallback,
+// and the boxes end up sized for the wrong glyphs. We also load it
+// explicitly via document.fonts.load so we don't wait on unrelated fonts.
+window.addEventListener('load', async () => {
+  if (document.fonts && document.fonts.load) {
+    try {
+      await Promise.race([
+        document.fonts.load('14px "JetBrains Mono"'),
+        new Promise(r => setTimeout(r, 1500))  // never wait more than 1.5s
+      ]);
+    } catch (e) { /* offline or blocked — render anyway with fallback */ }
+  }
+  renderDiagram();
+});
+</script>
+</body>
+</html>

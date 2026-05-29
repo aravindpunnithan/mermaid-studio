@@ -24,7 +24,8 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 
 - PNG at 1×, 2×, 3× (default), or 4× device-pixel ratio. Transparent, white, or black background — independent of the preview theme.
 - PDF on A4, A3, or Letter, with automatic landscape/portrait selection and 15 mm margins.
-- Outputs are timestamped: `diagram-YYYYMMDD-HHMMSS.png` / `.pdf`.
+- Outputs are timestamped: `<prefix>-YYYYMMDD-HHMMSS.png` / `.pdf`.
+- The filename prefix is editable in the toolbar (default `diagram`). Illegal filename characters are stripped automatically.
 - Files are named so a folder of exports sorts chronologically.
 
 **Diagnostics**

@@ -103,6 +103,25 @@ body {
 
 select.wide { min-width:130px; }
 
+/* Toolbar text input (filename prefix) — matched to the select styling so
+   the FILE group reads as one of the other compact export controls. */
+input.text-input {
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:500;
+  background:var(--bg-2);
+  color:var(--text-0);
+  border:1px solid var(--border);
+  padding:6px 10px;
+  letter-spacing:0.5px;
+  border-radius:0;
+  outline:none;
+  width:110px;
+  transition:background 100ms, border-color 100ms;
+}
+input.text-input:hover  { background:var(--bg-3); border-color:var(--border-strong); }
+input.text-input:focus  { border-color:var(--accent); }
+
 button, select {
   font-family:var(--mono);
   font-size:11px; font-weight:500;
@@ -386,6 +405,13 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
       <option value="gantt">Gantt</option>
       <option value="state">State</option>
     </select>
+  </div>
+  <div class="divider-vert strong"></div>
+  <div class="toolbar-group group-export">
+    <span class="group-label">FILE</span>
+    <input id="filenamePrefix" class="text-input" type="text" value="diagram"
+           maxlength="40" spellcheck="false"
+           title="Filename prefix for PNG / PDF exports">
   </div>
   <div class="divider-vert strong"></div>
   <div class="toolbar-group group-export">
@@ -1380,7 +1406,7 @@ document.getElementById('exportPng').addEventListener('click', async () => {
     catch (e) {
       throw new Error('Canvas was tainted (likely <foreignObject> content). Try a different diagram type or simplify labels.');
     }
-    triggerDownload(url, `diagram-${stamp()}.png`);
+    triggerDownload(url, `${filenamePrefix()}-${stamp()}.png`);
 
     renderStatus.textContent = `PNG exported ✓ (${canvas.width}×${canvas.height}, ${bgKey})`;
     renderStatus.className = 'status-ok';
@@ -1455,7 +1481,7 @@ document.getElementById('exportPdf').addEventListener('click', async () => {
     const y = (pageH - drawH) / 2;
 
     pdf.addImage(jpeg, 'JPEG', x, y, drawW, drawH, undefined, 'FAST');
-    pdf.save(`diagram-${stamp()}.pdf`);
+    pdf.save(`${filenamePrefix()}-${stamp()}.pdf`);
 
     renderStatus.textContent = `PDF exported ✓ (${paperKey.toUpperCase()}, ${orientation})`;
     renderStatus.className = 'status-ok';
@@ -1485,6 +1511,16 @@ function stamp() {
   const d = new Date();
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+// Read the user-provided filename prefix, strip characters that aren't
+// safe in filenames (/, \, :, *, ?, ", <, >, |, control chars), trim,
+// and fall back to "diagram" if the result is empty.
+function filenamePrefix() {
+  const el = document.getElementById('filenamePrefix');
+  const raw = el && typeof el.value === 'string' ? el.value : '';
+  const safe = raw.replace(/[\/\\:*?"<>|\x00-\x1f]/g, '').trim();
+  return safe || 'diagram';
 }
 
 // ============================================================

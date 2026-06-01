@@ -50,6 +50,16 @@
   --shadow:0 2px 6px rgba(0,0,0,0.08);
   --grid-line:rgba(0,0,0,0.04);
 }
+/* High-contrast theme: pure black-on-white with thick, opaque borders.
+   Intended for users who need strong contrast for accessibility. */
+[data-theme="hc"] {
+  --bg-0:#ffffff; --bg-1:#ffffff; --bg-2:#ffffff; --bg-3:#f0f0f0;
+  --border:#000000; --border-strong:#000000;
+  --text-0:#000000; --text-1:#000000; --text-2:#000000;
+  --accent:#0000ee; --accent-hover:#0000cc; --accent-text:#ffffff;
+  --shadow:none;
+  --grid-line:rgba(0,0,0,0.12);
+}
 
 * { box-sizing:border-box; margin:0; padding:0; }
 html, body { height:100%; width:100%; overflow:hidden; }
@@ -264,6 +274,7 @@ select:focus { outline:1px solid var(--accent); outline-offset:-1px; }
   opacity:0; transition:opacity 120ms;
 }
 [data-theme="light"] .spinner { background:rgba(255,255,255,0.6); }
+[data-theme="hc"]    .spinner { background:rgba(255,255,255,0.75); }
 .spinner.visible { opacity:1; }
 .spinner-dot {
   width:6px; height:6px;
@@ -445,7 +456,11 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
     <option value="sans">Sans</option>
     <option value="serif">Serif</option>
   </select>
-  <button id="themeToggle" title="Toggle theme">Dark</button>
+  <select id="themeSelect" title="UI theme">
+    <option value="dark" selected>Dark</option>
+    <option value="light">Light</option>
+    <option value="hc">High-contrast</option>
+  </select>
 </header>
 
 <main class="workspace">
@@ -659,15 +674,43 @@ function buildMermaidConfig(theme, htmlLabels) {
   const fontSize   = isMono ? '13px' : '16px';
   const pad        = isMono ? 14    : 8;
 
+  // For high-contrast we drive Mermaid's 'neutral' theme with overrides
+  // that force pure black-on-white and thick strokes. Mermaid doesn't ship
+  // an HC theme of its own; neutral is the most monochrome starting point.
+  const themeVariables = {
+    fontFamily: fontFamily,
+    fontSize:   fontSize
+  };
+  if (theme === 'neutral') {
+    Object.assign(themeVariables, {
+      background:        '#ffffff',
+      primaryColor:      '#ffffff',
+      primaryBorderColor:'#000000',
+      primaryTextColor:  '#000000',
+      lineColor:         '#000000',
+      textColor:         '#000000',
+      mainBkg:           '#ffffff',
+      nodeBorder:        '#000000',
+      clusterBkg:        '#ffffff',
+      clusterBorder:     '#000000',
+      edgeLabelBackground:'#ffffff',
+      tertiaryColor:     '#ffffff'
+    });
+  }
+
+  // Inject thicker strokes when high-contrast is active so node borders,
+  // edges and arrows are easier to perceive.
+  const themeCSS = theme === 'neutral'
+    ? '.node rect, .node circle, .node ellipse, .node polygon, .node path, .cluster rect, .actor, .messageLine0, .messageLine1, .flowchart-link, .edgePath path { stroke-width: 2.5px !important; }'
+    : undefined;
+
   return {
     startOnLoad: false,
     theme: theme,
     securityLevel: 'loose',
     fontFamily: fontFamily,
-    themeVariables: {
-      fontFamily: fontFamily,
-      fontSize:   fontSize
-    },
+    themeVariables: themeVariables,
+    themeCSS: themeCSS,
     er:        { useMaxWidth: false },
     flowchart: { useMaxWidth: false, htmlLabels: htmlLabels, curve: 'basis', padding: pad, nodeSpacing: isMono ? 60 : 50, rankSpacing: isMono ? 60 : 50 },
     sequence:  { useMaxWidth: false, htmlLabels: htmlLabels, boxMargin: pad, noteMargin: pad },
@@ -1181,12 +1224,19 @@ document.getElementById('exampleSelect').addEventListener('change', e => {
   renderDiagram();
 });
 
-document.getElementById('themeToggle').addEventListener('click', () => {
-  state.theme = state.theme === 'dark' ? 'light' : 'dark';
-  state.mermaidTheme = state.theme === 'dark' ? 'dark' : 'default';
-  document.body.dataset.theme = state.theme;
-  document.getElementById('themeToggle').textContent = state.theme[0].toUpperCase() + state.theme.slice(1);
-  document.getElementById('metaTheme').textContent = state.theme;
+// Map our UI theme to a Mermaid theme name. The preview pulls this for
+// in-app rendering; the export path keeps its own mapping (white/black
+// background → default/dark) so HC affects the UI but not exported files.
+const MERMAID_THEME_FOR_UI = { dark: 'dark', light: 'default', hc: 'neutral' };
+const THEME_LABEL          = { dark: 'dark', light: 'light',   hc: 'high-contrast' };
+
+document.getElementById('themeSelect').addEventListener('change', e => {
+  const v = e.target.value;
+  if (!MERMAID_THEME_FOR_UI[v]) return;
+  state.theme = v;
+  state.mermaidTheme = MERMAID_THEME_FOR_UI[v];
+  document.body.dataset.theme = v;
+  document.getElementById('metaTheme').textContent = THEME_LABEL[v];
   initMermaid();
   if (state.hasValidRender || editor.value.trim()) renderDiagram();
 });

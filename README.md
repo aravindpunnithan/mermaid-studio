@@ -17,6 +17,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 - Mermaid 10.9.0 driven programmatically via `mermaid.render()` (no `startOnLoad`).
 - Pan, zoom, fit-to-screen, and reset controls via `svg-pan-zoom`.
 - Three diagram fonts — JetBrains Mono (default), system Sans, and Serif — applied to both preview and exports.
+- Optional export-only font override: pick a different font for PNG / PDF without changing the preview (e.g. preview in Mono, export in Serif).
 - Three themes — Dark (default), Light, and High-contrast — pickable from a dropdown, independent of export styling. High-contrast uses Mermaid's `neutral` base with overrides for black-on-white plus thicker strokes for accessibility.
 - Post-render box-fit pass that grows shape geometry (rect, circle, ellipse, polygon — including diamonds and hexagons) so labels never bleed out of their containers, even with monospace fonts that Mermaid's measurement underestimates.
 

@@ -451,10 +451,16 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
     </select>
   </div>
   <div class="toolbar-spacer"></div>
-  <select id="fontSelect" title="Diagram font">
+  <select id="fontSelect" title="Diagram font (preview)">
     <option value="mono" selected>Mono</option>
     <option value="sans">Sans</option>
     <option value="serif">Serif</option>
+  </select>
+  <select id="exportFontSelect" title="Font for PNG / PDF exports">
+    <option value="preview" selected>Export: same</option>
+    <option value="sans">Export: Sans</option>
+    <option value="mono">Export: Mono</option>
+    <option value="serif">Export: Serif</option>
   </select>
   <select id="themeSelect" title="UI theme">
     <option value="dark" selected>Dark</option>
@@ -668,9 +674,12 @@ const EXAMPLES = {
 //
 // We use true for the preview (so the user sees properly-fitted boxes)
 // and false in the export path (so PNG/PDF rasterisation succeeds).
-function buildMermaidConfig(theme, htmlLabels) {
-  const fontFamily = FONT_STACKS[state.font] || FONT_STACKS.sans;
-  const isMono     = state.font === 'mono';
+function buildMermaidConfig(theme, htmlLabels, fontOverride) {
+  // fontOverride is used by the export path (e.g. "serif" exports while
+  // the preview stays on mono). Falls back to the preview font when null.
+  const fontKey    = (fontOverride && FONT_STACKS[fontOverride]) ? fontOverride : state.font;
+  const fontFamily = FONT_STACKS[fontKey] || FONT_STACKS.sans;
+  const isMono     = fontKey === 'mono';
   const fontSize   = isMono ? '13px' : '16px';
   const pad        = isMono ? 14    : 8;
 
@@ -1309,19 +1318,33 @@ window.addEventListener('resize', () => {
 // elements match the chosen export background (not just the canvas), we
 // re-render fresh with the right theme. We restore the preview theme in a
 // `finally` so the live view is unaffected.
-async function renderWithTheme(theme) {
+async function renderWithTheme(theme, fontOverride) {
   const src = editor.value.trim();
   if (!src) throw new Error('No diagram source');
 
+  // If an export-font override is in play, also override the page-scope
+  // --diagram-font so Mermaid's off-DOM text measurement uses the same
+  // font as the final SVG render (same trick used for preview mono).
+  let savedFontVar;
+  if (fontOverride && FONT_STACKS[fontOverride]) {
+    savedFontVar = document.documentElement.style.getPropertyValue('--diagram-font');
+    document.documentElement.style.setProperty('--diagram-font', FONT_STACKS[fontOverride]);
+  }
+
   // Export: htmlLabels=false so the resulting SVG contains no
   // <foreignObject> and the canvas isn't tainted during rasterisation.
-  mermaid.initialize(buildMermaidConfig(theme, false));
+  mermaid.initialize(buildMermaidConfig(theme, false, fontOverride));
 
   let result;
   try {
     result = await mermaid.render(`mmd-export-${Date.now()}-${Math.floor(Math.random()*1e6)}`, src);
   } finally {
     initMermaid(); // restore the preview theme no matter what
+    if (savedFontVar !== undefined) {
+      // Restore the previous --diagram-font value (initMermaid would have
+      // reset it from state.font, so we re-apply only if we changed it).
+      document.documentElement.style.setProperty('--diagram-font', savedFontVar);
+    }
   }
 
   const svgXml = result.svg;
@@ -1343,7 +1366,7 @@ async function renderWithTheme(theme) {
 // We pick a Mermaid theme that matches the chosen background so node fills,
 // stroke colours, and label text are all coherent with the canvas — not just
 // the canvas itself but every element rendered onto it.
-async function rasterise(scale, background) {
+async function rasterise(scale, background, fontOverride) {
   // Pick a Mermaid theme that visually pairs with the chosen background.
   // Transparent: use the light ('default') theme — exports get composited
   // onto unknown backdrops (docs, Slack, presentations) and dark-on-light
@@ -1353,7 +1376,7 @@ async function rasterise(scale, background) {
   if (background === '#000000')       exportTheme = 'dark';
   else                                 exportTheme = 'default';
 
-  const { svgXml, w, h } = await renderWithTheme(exportTheme);
+  const { svgXml, w, h } = await renderWithTheme(exportTheme, fontOverride);
 
   // Mount in a hidden offscreen sandbox. fitBoxesToText() relies on
   // getBBox / getBoundingClientRect, which only return real values once
@@ -1440,17 +1463,26 @@ async function rasterise(scale, background) {
 // Independent of light/dark theme — the user picks the export background.
 const PNG_BG = { transparent: 'transparent', white: '#ffffff', black: '#000000' };
 
+// Read the export-font override dropdown. 'preview' (or anything we don't
+// recognise) returns undefined, which makes rasterise() fall back to the
+// preview font. Anything else (sans/mono/serif) wins for the export only.
+function exportFontOverride() {
+  const v = document.getElementById('exportFontSelect').value;
+  return (v && FONT_STACKS[v]) ? v : undefined;
+}
+
 document.getElementById('exportPng').addEventListener('click', async () => {
   if (!state.hasValidRender) return;
   const scale = parseInt(document.getElementById('resolutionSelect').value, 10) || 3;
   const bgKey = document.getElementById('pngBgSelect').value;
   const background = PNG_BG[bgKey] || 'transparent';
+  const fontOpt = exportFontOverride();
   try {
     renderStatus.textContent = `Exporting PNG (${scale}×, ${bgKey})…`;
     renderStatus.className = '';
     showSpinner(true);
 
-    const canvas = await rasterise(scale, background);
+    const canvas = await rasterise(scale, background, fontOpt);
     let url;
     try { url = canvas.toDataURL('image/png'); }
     catch (e) {
@@ -1492,7 +1524,7 @@ document.getElementById('exportPdf').addEventListener('click', async () => {
 
     // 3× rasterisation for print quality. PDFs are documents, so always
     // render onto white regardless of preview theme.
-    const canvas = await rasterise(3, '#ffffff');
+    const canvas = await rasterise(3, '#ffffff', exportFontOverride());
     let jpeg;
     try { jpeg = canvas.toDataURL('image/jpeg', 0.95); }
     catch (e) {

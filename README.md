@@ -34,6 +34,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 - Live metadata footer: inferred diagram type, SVG dimensions at 1×, and physical print size at 300 DPI.
 - Render status indicator with success / error states.
 - Clear, human-readable error display when Mermaid source fails to parse.
+- Parse / lexical errors that include a line number highlight the offending line in the editor (a red-tinted band that tracks scroll).
 
 ## How it works
 

@@ -196,7 +196,23 @@ select:focus { outline:1px solid var(--accent); outline-offset:-1px; }
   width:38%;
   background:var(--bg-1);
   border-right:1px solid var(--border);
+  position:relative; /* anchor for the error-line overlay */
 }
+
+/* Red-tinted overlay band that highlights the offending line when Mermaid
+   throws a parse / lexical error. Pointer-events:none so the textarea
+   stays interactive underneath. Positioned by JS from the textarea's
+   computed line-height and padding-top. */
+.editor-error-line {
+  position:absolute;
+  left:0; right:0;
+  background:rgba(255,92,92,0.18);
+  border-left:3px solid var(--error);
+  pointer-events:none;
+  z-index:1;
+}
+[data-theme="light"] .editor-error-line { background:rgba(255,92,92,0.14); }
+[data-theme="hc"]    .editor-error-line { background:rgba(255,0,0,0.2); border-left-color:#cc0000; }
 .preview-panel { flex:1; background:var(--bg-0); }
 
 .panel-header {
@@ -493,6 +509,7 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
         int quantity
         float unitPrice
     }</textarea>
+    <div id="editorErrorLine" class="editor-error-line" hidden></div>
   </section>
 
   <div class="divider" id="divider"></div>
@@ -776,7 +793,19 @@ editor.addEventListener('input', () => {
     document.getElementById('exampleSelect').value = '';
     loadedExample = '';
   }
+  // Any edit invalidates the previous error highlight — it'll be
+  // re-applied on the next render if still relevant.
+  hideErrorLine();
   scheduleRender();
+});
+
+// Keep the error overlay aligned with the editor as the user scrolls or
+// the window resizes (which can change panel widths and line wrapping).
+editor.addEventListener('scroll', () => {
+  if (currentErrorLine) showErrorLine(currentErrorLine);
+});
+window.addEventListener('resize', () => {
+  if (currentErrorLine) showErrorLine(currentErrorLine);
 });
 
 document.getElementById('renderBtn').addEventListener('click', () => {
@@ -837,6 +866,7 @@ async function renderDiagram() {
 
     renderStatus.textContent = 'Rendered ✓';
     renderStatus.className = 'status-ok';
+    hideErrorLine();
   } catch (err) {
     console.error('Mermaid render error:', err);
     const message = (err && err.message) ? err.message : String(err);
@@ -848,6 +878,9 @@ async function renderDiagram() {
     updateMetadata(null, '');
     renderStatus.textContent = 'Error';
     renderStatus.className = 'status-err';
+    const errLine = parseErrorLine(message);
+    if (errLine) showErrorLine(errLine);
+    else hideErrorLine();
   } finally {
     showSpinner(false);
   }
@@ -1134,6 +1167,52 @@ function resizePolygon(polygon, needW, needH) {
 }
 
 function showSpinner(on) { spinner.classList.toggle('visible', on); }
+
+// ─── Error-line highlight ──────────────────────────────────────────────
+// Mermaid's error messages vary in format; common ones are:
+//   "Lexical error on line 4. ..."
+//   "Parse error on line 7: ..."
+//   "... at line 12 column 3 ..."
+// We pull the first integer following "line" (case-insensitive). For
+// errors with no line info we just leave the overlay hidden.
+let currentErrorLine = 0;
+function parseErrorLine(message) {
+  const m = String(message).match(/line[^\d]*?(\d+)/i);
+  if (!m) return 0;
+  const n = parseInt(m[1], 10);
+  return (Number.isFinite(n) && n > 0) ? n : 0;
+}
+
+// Position the overlay band over the textarea's nth line. We read the
+// computed line-height and padding-top each time so the overlay tracks
+// font-size changes and any future zoom. Scrolling is handled by the
+// editor 'scroll' listener registered below.
+function showErrorLine(lineNumber) {
+  const overlay = document.getElementById('editorErrorLine');
+  if (!overlay) return;
+  currentErrorLine = lineNumber;
+
+  const panel  = document.querySelector('.input-panel');
+  const eRect  = editor.getBoundingClientRect();
+  const pRect  = panel.getBoundingClientRect();
+  const cs     = window.getComputedStyle(editor);
+  const lineH  = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) * 1.65);
+  const padTop = parseFloat(cs.paddingTop) || 0;
+
+  // Pixel y of line N within the editor's content box, minus scroll, plus
+  // editor offset within the input panel.
+  const y = (eRect.top - pRect.top) + padTop + (lineNumber - 1) * lineH - editor.scrollTop;
+
+  overlay.style.top    = y + 'px';
+  overlay.style.height = lineH + 'px';
+  overlay.hidden = false;
+}
+
+function hideErrorLine() {
+  currentErrorLine = 0;
+  const overlay = document.getElementById('editorErrorLine');
+  if (overlay) overlay.hidden = true;
+}
 
 function setExportEnabled(enabled) {
   document.getElementById('exportPng').disabled = !enabled;

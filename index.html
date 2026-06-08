@@ -432,6 +432,7 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
       <option value="gantt">Gantt</option>
       <option value="state">State</option>
     </select>
+    <button id="shareBtn" title="Copy a shareable URL containing this diagram">Share</button>
   </div>
   <div class="divider-vert strong"></div>
   <div class="toolbar-group group-export">
@@ -548,6 +549,7 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
 
 <script>
 // ============================================================
@@ -1685,7 +1687,56 @@ function filenamePrefix() {
 }
 
 // ============================================================
-// 13. INITIAL RENDER
+// 13. SHAREABLE URL  (LZ-compressed source in the URL hash)
+// ------------------------------------------------------------
+// We use lz-string's compressToEncodedURIComponent / decompress pair —
+// they produce URL-safe output (no extra %-encoding needed) and are
+// dramatically smaller than raw base64 for typical Mermaid source. The
+// hash format is `#src=<encoded>`. Reading the hash on load gives us the
+// shared content; writing it from the Share button updates the hash in
+// place (no history entry) and copies the full URL to the clipboard.
+// ============================================================
+function readSharedSource() {
+  const h = window.location.hash || '';
+  const m = h.match(/^#src=(.+)$/);
+  if (!m || typeof LZString === 'undefined') return null;
+  try {
+    const decoded = LZString.decompressFromEncodedURIComponent(m[1]);
+    return decoded || null;
+  } catch (e) { return null; }
+}
+
+async function copyShareUrl() {
+  if (typeof LZString === 'undefined') {
+    renderStatus.textContent = 'Share unavailable (lz-string not loaded)';
+    renderStatus.className = 'status-err';
+    return;
+  }
+  const encoded = LZString.compressToEncodedURIComponent(editor.value);
+  // Update the hash in place without adding a history entry or scrolling.
+  history.replaceState(null, '', '#src=' + encoded);
+  const url = window.location.href;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      // Fallback for file:// or older browsers without async clipboard.
+      const ta = document.createElement('textarea');
+      ta.value = url; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } finally { document.body.removeChild(ta); }
+    }
+    renderStatus.textContent = `Share URL copied (${url.length} chars)`;
+    renderStatus.className = 'status-ok';
+  } catch (e) {
+    renderStatus.textContent = 'Couldn’t copy (URL updated)';
+    renderStatus.className = 'status-err';
+  }
+}
+document.getElementById('shareBtn').addEventListener('click', copyShareUrl);
+
+// ============================================================
+// 14. INITIAL RENDER
 // ============================================================
 charCount.textContent = `${editor.value.length} chars`;
 // Defer initial render until JetBrains Mono is actually loaded — otherwise
@@ -1693,6 +1744,17 @@ charCount.textContent = `${editor.value.length} chars`;
 // and the boxes end up sized for the wrong glyphs. We also load it
 // explicitly via document.fonts.load so we don't wait on unrelated fonts.
 window.addEventListener('load', async () => {
+  // Precedence on load: URL hash > default editor content. Apply the
+  // shared source (if any) BEFORE the font wait, so the wait itself
+  // doesn't delay the swap.
+  const shared = readSharedSource();
+  if (shared) {
+    editor.value = shared;
+    charCount.textContent = `${editor.value.length} chars`;
+    loadedExample = '';
+    const sel = document.getElementById('exampleSelect');
+    if (sel) sel.value = '';
+  }
   if (document.fonts && document.fonts.load) {
     try {
       await Promise.race([

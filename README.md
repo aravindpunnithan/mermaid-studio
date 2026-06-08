@@ -11,6 +11,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 - Live preview with a 600ms debounce — type, see the diagram redraw.
 - Six built-in examples (ER, flowchart, sequence, class, Gantt, state) one click away from the source pane.
 - Split-pane editor and preview with a draggable divider; stacks vertically on mobile.
+- **Share** button copies a URL containing the current diagram (LZ-compressed into the URL hash). Opening the URL restores the diagram automatically.
 
 **Rendering**
 
@@ -43,6 +44,7 @@ The file is fully self-contained — HTML, CSS, and JavaScript in one document, 
 - [`mermaid@10.9.0`](https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js) — diagram rendering
 - [`jspdf@2.5.1`](https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js) — PDF generation
 - [`svg-pan-zoom@3.6.1`](https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js) — preview pan / zoom
+- [`lz-string@1.5.0`](https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js) — URL-safe compression for the share-link feature
 - [JetBrains Mono via Google Fonts](https://fonts.googleapis.com/css2?family=JetBrains+Mono) — editor and label typography
 
 The favicon is an inline SVG data URI; everything else the browser needs is fetched once on first load and cached.

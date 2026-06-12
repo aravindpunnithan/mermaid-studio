@@ -540,6 +540,7 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
       <div class="meta-item"><span class="label">Type</span><span class="value" id="metaType">—</span></div>
       <div class="meta-item"><span class="label">Size</span><span class="value" id="metaSize">—</span></div>
       <div class="meta-item"><span class="label">Print @ 300dpi</span><span class="value" id="metaPrint">—</span></div>
+      <div class="meta-item"><span class="label">Zoom</span><span class="value" id="metaZoom">—</span></div>
       <div class="meta-item"><span class="label">Theme</span><span class="value" id="metaTheme">dark</span></div>
     </div>
   </section>
@@ -1240,8 +1241,24 @@ function initPanZoom(svg) {
     center: true,
     minZoom: 0.1,
     maxZoom: 20,
-    zoomScaleSensitivity: 0.3
+    zoomScaleSensitivity: 0.3,
+    // svg-pan-zoom fires this on every wheel/pinch step AND after fit/
+    // resetZoom/zoomIn/zoomOut — so the live percentage stays accurate.
+    onZoom: updateZoomMeta
   });
+  // Initial value: fit() runs as part of construction with fit:true above.
+  updateZoomMeta();
+}
+
+// Read the current svg-pan-zoom scale and write it to the metadata footer
+// as an integer percentage (100% = SVG natural size).
+function updateZoomMeta() {
+  const el = document.getElementById('metaZoom');
+  if (!el) return;
+  if (!state.panZoom) { el.textContent = '—'; return; }
+  let z;
+  try { z = state.panZoom.getZoom(); } catch (e) { z = null; }
+  el.textContent = (z && isFinite(z)) ? `${Math.round(z * 100)}%` : '—';
 }
 
 function withPanZoom(fn) {

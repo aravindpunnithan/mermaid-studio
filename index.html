@@ -230,6 +230,26 @@ select:focus { outline:1px solid var(--accent); outline-offset:-1px; }
 .panel-header .status-ok { color:var(--accent); }
 .panel-header .status-err { color:var(--error); }
 
+/* Right-hand cluster in the source panel header (char count + font-size
+   controls). The buttons are deliberately tiny — they sit in a 10px-uppercase
+   header strip, so they need to read as inline meta controls, not toolbar
+   actions. */
+.panel-header-right { display:inline-flex; align-items:center; gap:6px; }
+.panel-header-right button.mini-btn {
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:0.5px;
+  background:var(--bg-3);
+  color:var(--text-1);
+  border:1px solid var(--border);
+  padding:1px 6px;
+  cursor:pointer;
+  line-height:1.2;
+  text-transform:none;
+}
+.panel-header-right button.mini-btn:hover { color:var(--text-0); border-color:var(--border-strong); }
+.panel-header-right button.mini-btn:active { background:var(--accent); color:var(--accent-text); border-color:var(--accent); }
+
 .editor {
   flex:1; width:100%;
   background:var(--bg-1);
@@ -490,7 +510,11 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
   <section class="input-panel">
     <div class="panel-header">
       <span>// source</span>
-      <span id="charCount">0 chars</span>
+      <span class="panel-header-right">
+        <span id="charCount">0 chars</span>
+        <button class="mini-btn" id="fontSizeMinus" title="Decrease editor font size (Ctrl+scroll)">A−</button>
+        <button class="mini-btn" id="fontSizePlus"  title="Increase editor font size (Ctrl+scroll)">A+</button>
+      </span>
     </div>
     <textarea id="editor" class="editor" spellcheck="false" placeholder="Paste or type Mermaid diagram source…">erDiagram
     CUSTOMER ||--o{ ORDER : places
@@ -1751,6 +1775,52 @@ async function copyShareUrl() {
   }
 }
 document.getElementById('shareBtn').addEventListener('click', copyShareUrl);
+
+// ============================================================
+// 13b. EDITOR FONT-SIZE CONTROL
+// ------------------------------------------------------------
+// +/- buttons in the source panel header, plus Ctrl/Cmd+wheel over the
+// textarea. Choice persists to localStorage so it survives reloads.
+// Range is clamped to 10–24px so a stray Ctrl-scroll can't make the
+// editor unreadable.
+// ============================================================
+const EDITOR_FS_KEY = 'mermaidStudio.editorFontSize';
+const EDITOR_FS_MIN = 10;
+const EDITOR_FS_MAX = 24;
+const EDITOR_FS_DEFAULT = 13;
+
+function loadEditorFontSize() {
+  let n = NaN;
+  try { n = parseInt(localStorage.getItem(EDITOR_FS_KEY), 10); } catch (e) {}
+  return (Number.isFinite(n) && n >= EDITOR_FS_MIN && n <= EDITOR_FS_MAX) ? n : EDITOR_FS_DEFAULT;
+}
+
+function setEditorFontSize(px) {
+  const clamped = Math.max(EDITOR_FS_MIN, Math.min(EDITOR_FS_MAX, px | 0));
+  editor.style.fontSize = clamped + 'px';
+  try { localStorage.setItem(EDITOR_FS_KEY, String(clamped)); } catch (e) {}
+  // Error-line overlay derives its geometry from the editor's line-height,
+  // which is relative to font-size — so we re-position it on font change.
+  if (currentErrorLine) showErrorLine(currentErrorLine);
+}
+
+function currentEditorFontSize() {
+  return parseInt(window.getComputedStyle(editor).fontSize, 10) || EDITOR_FS_DEFAULT;
+}
+
+setEditorFontSize(loadEditorFontSize());
+
+document.getElementById('fontSizeMinus').addEventListener('click', () => {
+  setEditorFontSize(currentEditorFontSize() - 1);
+});
+document.getElementById('fontSizePlus').addEventListener('click', () => {
+  setEditorFontSize(currentEditorFontSize() + 1);
+});
+editor.addEventListener('wheel', e => {
+  if (!(e.ctrlKey || e.metaKey)) return; // only act when modifier is held
+  e.preventDefault();
+  setEditorFontSize(currentEditorFontSize() + (e.deltaY < 0 ? 1 : -1));
+}, { passive: false });
 
 // ============================================================
 // 14. INITIAL RENDER

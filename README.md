@@ -12,6 +12,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 - Six built-in examples (ER, flowchart, sequence, class, Gantt, state) one click away from the source pane.
 - Split-pane editor and preview with a draggable divider; stacks vertically on mobile.
 - **Share** button copies a URL containing the current diagram (LZ-compressed into the URL hash). Opening the URL restores the diagram automatically.
+- Editor font size adjustable via A− / A+ buttons in the source pane header or with Ctrl/Cmd+scroll over the editor. Choice persists via localStorage.
 
 **Rendering**
 

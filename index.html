@@ -823,8 +823,26 @@ editor.addEventListener('input', () => {
   // Any edit invalidates the previous error highlight — it'll be
   // re-applied on the next render if still relevant.
   hideErrorLine();
+  scheduleSaveDiagram();
   scheduleRender();
 });
+
+// Auto-save the current source to localStorage so we can restore on
+// reload. We piggy-back on the same debounce cadence as render to avoid
+// hammering storage during fast typing. Storage failures (quota, disabled,
+// private window) are silently swallowed — persistence is best-effort.
+const DIAGRAM_SRC_KEY = 'mermaidStudio.lastDiagram';
+let saveTimer = null;
+function scheduleSaveDiagram() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDiagramNow, 600);
+}
+function saveDiagramNow() {
+  try { localStorage.setItem(DIAGRAM_SRC_KEY, editor.value); } catch (e) {}
+}
+function loadStoredDiagram() {
+  try { return localStorage.getItem(DIAGRAM_SRC_KEY) || null; } catch (e) { return null; }
+}
 
 // Keep the error overlay aligned with the editor as the user scrolls or
 // the window resizes (which can change panel widths and line wrapping).
@@ -1351,6 +1369,9 @@ document.getElementById('exampleSelect').addEventListener('change', e => {
   editor.value = EXAMPLES[v];
   charCount.textContent = `${editor.value.length} chars`;
   loadedExample = v;             // remember it so the dropdown label persists
+  // The loaded example becomes the "current state" — persist it
+  // immediately so a reload restores the same example.
+  saveDiagramNow();
   clearTimeout(debounceTimer);
   renderDiagram();
 });
@@ -1831,12 +1852,13 @@ charCount.textContent = `${editor.value.length} chars`;
 // and the boxes end up sized for the wrong glyphs. We also load it
 // explicitly via document.fonts.load so we don't wait on unrelated fonts.
 window.addEventListener('load', async () => {
-  // Precedence on load: URL hash > default editor content. Apply the
-  // shared source (if any) BEFORE the font wait, so the wait itself
-  // doesn't delay the swap.
+  // Precedence on load: URL hash > localStorage > default editor content.
+  // Apply BEFORE the font wait so the wait itself doesn't delay the swap.
   const shared = readSharedSource();
-  if (shared) {
-    editor.value = shared;
+  const stored = shared ? null : loadStoredDiagram();
+  const restored = shared || stored;
+  if (restored) {
+    editor.value = restored;
     charCount.textContent = `${editor.value.length} chars`;
     loadedExample = '';
     const sel = document.getElementById('exampleSelect');

@@ -17,7 +17,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 
 **Rendering**
 
-- Mermaid 10.9.0 driven programmatically via `mermaid.render()` (no `startOnLoad`).
+- Mermaid 10.9.3 driven programmatically via `mermaid.render()` (no `startOnLoad`).
 - Pan, zoom, fit-to-screen, and reset controls via `svg-pan-zoom`.
 - Three diagram fonts — JetBrains Mono (default), system Sans, and Serif — applied to both preview and exports.
 - Optional export-only font override: pick a different font for PNG / PDF without changing the preview (e.g. preview in Mono, export in Serif).
@@ -43,7 +43,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 
 The file is fully self-contained — HTML, CSS, and JavaScript in one document, with CDN-loaded dependencies pinned to specific versions:
 
-- [`mermaid@10.9.0`](https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js) — diagram rendering
+- [`mermaid@10.9.3`](https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js) — diagram rendering
 - [`jspdf@2.5.1`](https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js) — PDF generation
 - [`svg-pan-zoom@3.6.1`](https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js) — preview pan / zoom
 - [`lz-string@1.5.0`](https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js) — URL-safe compression for the share-link feature

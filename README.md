@@ -8,7 +8,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 
 **Authoring**
 
-- Live preview with a 600ms debounce — type, see the diagram redraw.
+- Live preview with a 600ms debounce — type, see the diagram redraw. Press **Ctrl/Cmd+Enter** in the source pane to force an immediate render.
 - Six built-in examples (ER, flowchart, sequence, class, Gantt, state) one click away from the source pane.
 - Split-pane editor and preview with a draggable divider; stacks vertically on mobile.
 - **Share** button copies a URL containing the current diagram (LZ-compressed into the URL hash). Opening the URL restores the diagram automatically.

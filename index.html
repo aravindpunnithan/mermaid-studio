@@ -858,6 +858,17 @@ document.getElementById('renderBtn').addEventListener('click', () => {
   renderDiagram();
 });
 
+// Ctrl/Cmd + Enter inside the source pane forces an immediate render,
+// bypassing the 600ms debounce. preventDefault stops the newline that
+// the textarea would otherwise insert.
+editor.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    clearTimeout(debounceTimer);
+    renderDiagram();
+  }
+});
+
 // ============================================================
 // 4. CORE RENDER PIPELINE
 // ------------------------------------------------------------

@@ -268,6 +268,18 @@ select:focus { outline:1px solid var(--accent); outline-offset:-1px; }
   font-variant-ligatures: contextual common-ligatures;
 }
 .editor::selection { background:rgba(0,212,255,0.25); }
+/* When the wrap toggle is OFF, switch the editor to no-wrap mode so
+   long lines stay intact and scroll horizontally. Default textarea
+   behaviour wraps soft, which is what we want when this class is absent. */
+.editor.no-wrap { white-space:pre; overflow-x:auto; word-wrap:normal; }
+
+/* Active state for the wrap toggle button — visually distinct so the
+   user knows wrap is currently off. */
+.panel-header-right button.mini-btn.active {
+  background:var(--accent);
+  color:var(--accent-text);
+  border-color:var(--accent);
+}
 
 .divider {
   width:5px; background:var(--border);
@@ -512,6 +524,7 @@ foreignObject, foreignObject div, foreignObject span, foreignObject p,
       <span>// source</span>
       <span class="panel-header-right">
         <span id="charCount">0 chars</span>
+        <button class="mini-btn" id="wrapToggle"    title="Toggle word wrap">Wrap</button>
         <button class="mini-btn" id="fontSizeMinus" title="Decrease editor font size (Ctrl+scroll)">A−</button>
         <button class="mini-btn" id="fontSizePlus"  title="Increase editor font size (Ctrl+scroll)">A+</button>
       </span>
@@ -1853,6 +1866,34 @@ editor.addEventListener('wheel', e => {
   e.preventDefault();
   setEditorFontSize(currentEditorFontSize() + (e.deltaY < 0 ? 1 : -1));
 }, { passive: false });
+
+// ============================================================
+// 13c. WORD-WRAP TOGGLE
+// ------------------------------------------------------------
+// Adds a per-pane toggle: wrap on (default — long lines wrap visually,
+// no horizontal scroll) vs. wrap off (lines scroll horizontally). Choice
+// persists to localStorage so it survives reloads.
+// ============================================================
+const WRAP_KEY = 'mermaidStudio.editorWrap';
+function loadWrap() {
+  try { return localStorage.getItem(WRAP_KEY) !== 'off'; } catch (e) { return true; }
+}
+function setWrap(on) {
+  editor.classList.toggle('no-wrap', !on);
+  const btn = document.getElementById('wrapToggle');
+  if (btn) {
+    btn.textContent = on ? 'Wrap' : 'No-wrap';
+    btn.classList.toggle('active', !on);
+    btn.title = on ? 'Word wrap on (click to disable)' : 'Word wrap off (click to enable)';
+  }
+  try { localStorage.setItem(WRAP_KEY, on ? 'on' : 'off'); } catch (e) {}
+}
+setWrap(loadWrap());
+document.getElementById('wrapToggle').addEventListener('click', () => {
+  // editor.classList.contains('no-wrap') === true means wrap is currently
+  // OFF, so clicking should turn it ON. The toggle flips state.
+  setWrap(editor.classList.contains('no-wrap'));
+});
 
 // ============================================================
 // 14. INITIAL RENDER

@@ -13,6 +13,7 @@ Open `index.html` in a modern browser and you're working. No server, no install,
 - Split-pane editor and preview with a draggable divider; stacks vertically on mobile.
 - **Share** button copies a URL containing the current diagram (LZ-compressed into the URL hash). Opening the URL restores the diagram automatically.
 - Editor font size adjustable via A− / A+ buttons in the source pane header or with Ctrl/Cmd+scroll over the editor. Choice persists via localStorage.
+- Word-wrap toggle (Wrap / No-wrap) in the source pane header; choice persists via localStorage.
 - The current diagram auto-saves to localStorage and is restored on next load. Precedence on load: URL hash > localStorage > the built-in default example. Loading a built-in example also persists immediately.
 
 **Rendering**
